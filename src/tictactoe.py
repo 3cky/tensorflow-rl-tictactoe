@@ -75,7 +75,14 @@ def dump_board(sx, so, move_index=None, win_indices=None, q=None):
         if not q is None:
             print("   ", end="")
             for j in xrange(board_size):
-                print(" %.3f" % q[i, j], end="")
+                if (i, j) == move_index:
+                    color = Fore.GREEN
+                else:
+                    color = Fore.BLACK
+                if not (sx[i, j] or so[i, j]) or (i, j) == move_index:
+                    print(color + " %6.3f" % q[i, j] + Style.RESET_ALL, end="")
+                else:
+                    print(Fore.LIGHTBLACK_EX + "    *  " + Style.RESET_ALL, end="")
         print()
     print()
 
@@ -408,7 +415,7 @@ def build_graph():
     net = tf.reshape(net, [-1, int(np.prod(net.get_shape().as_list()[1:]))])
 
     # Hidden fully connected layer
-    net = layers.fully_connected(net, 30, activation_fn=nn.relu)
+    net = layers.fully_connected(net, 50, activation_fn=nn.relu)
 
     # Output layer
     net = layers.fully_connected(net, board_size*board_size, activation_fn=None)
