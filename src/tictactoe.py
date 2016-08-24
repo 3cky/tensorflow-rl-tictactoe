@@ -88,7 +88,7 @@ def dump_board(sx, so, move_index=None, win_indices=None, q=None):
 
 def check_win(s):
     """
-    Count marks and check for the 'win' state.
+    Count marks and check for the win state.
     """
     # Check rows and columns
     for i in xrange(board_size):
@@ -225,7 +225,7 @@ def train(session, graph_ops, summary_ops, saver):
             # Observe the next state
             s_t = create_state(move_x, sx_t, so_t)
             # Get Q values for all actions
-            q_t = q_values(s_t, session, q_nn, s)
+            q_t = q_values(session, q_nn, s, s_t)
             # Choose action based on epsilon-greedy policy
             q_max_index, a_t_index = choose_action(q_t, sx_t, so_t, epsilon)
 
@@ -235,8 +235,15 @@ def train(session, graph_ops, summary_ops, saver):
             if not s_t_prev is None:
                 # Calculate updated Q value
                 y_t_prev = r_t_prev + gamma * q_t[q_max_index]
+                # Apply equivalent transforms
+                s_t_prev, a_t_prev = apply_transforms(s_t_prev, a_t_prev)
+#                 if len(s_t_prev) < 4:
+#                     print("s_t_prev:\n", np.sum(s_t_prev, 1))
+#                     print("a_t_prev:\n", a_t_prev)
                 # Update Q network
-                session.run(q_nn_update, feed_dict={s: [s_t_prev], a: [a_t_prev], y: [y_t_prev]})
+                session.run(q_nn_update, feed_dict={s: s_t_prev,
+                                                    a: a_t_prev,
+                                                    y: [y_t_prev] * len(s_t_prev)})
 
             # Apply action to state
             r_t, sx_t, so_t, terminal = apply_action(move_x, sx_t, so_t, a_t_index)
@@ -248,8 +255,13 @@ def train(session, graph_ops, summary_ops, saver):
                 y_t = r_t # reward for current player
                 s_t_prev, a_t_prev, r_t_prev = sar_prev[-1] # previous opponent state/action/reward
                 y_t_prev = r_t_prev - gamma * r_t # discounted negative reward for opponent
+                # Apply equivalent transforms
+                s_t, a_t = apply_transforms(s_t, a_t)
+                s_t_prev, a_t_prev = apply_transforms(s_t_prev, a_t_prev)
                 # Update Q network
-                session.run(q_nn_update, feed_dict={s: [s_t, s_t_prev], a: [a_t, a_t_prev], y: [y_t, y_t_prev]})
+                session.run(q_nn_update, feed_dict={s: s_t + s_t_prev,
+                                                    a: a_t + a_t_prev,
+                                                    y: [y_t] * len(s_t) + [y_t_prev] * len(s_t_prev)})
 
                 # Play test game before next episode
                 length, win_x, win_o = test(session, q_nn, s)
@@ -302,7 +314,7 @@ def test(session, q_nn, s, dump=False):
         # Choose action
         s_t = create_state(move_x, sx_t, so_t)
         # Get Q values for all actions
-        q_t = q_values(s_t, session, q_nn, s)
+        q_t = q_values(session, q_nn, s, s_t)
         _q_max_index, a_t_index = choose_action(q_t, sx_t, so_t, -1.)
 
         # Apply action to state
@@ -338,46 +350,76 @@ def test(session, q_nn, s, dump=False):
         move_x = not move_x
         move_num += 1
 
-def q_values(s_t, session, q_nn, s):
+def apply_transforms(s, a):
     """
-    Get Q values for actions from network for given state.
+    Apply state/action equivalent transforms (rotations/flips).
     """
-    return q_nn.eval(session=session, feed_dict={s: [s_t]})[0]
+    # Get composite state and apply action to it (with reverse sign to distinct from existing marks)
+    sa = np.sum(s, 0) - a
 
-def create_state(move_x, sx_t, so_t):
+    # Transpose state from [channel, height, width] to [height, width, channel]
+    s = np.transpose(s, [1, 2, 0])
+
+    s_trans = [s]
+    a_trans = [a]
+    sa_trans = [sa]
+
+    # Apply rotations
+    sa_next = sa
+    for i in xrange(1, 4): # rotate to 90, 180, 270 degrees
+        sa_next = np.rot90(sa_next)
+        if same_states(sa_trans, sa_next):
+            # Skip rotated state matching state already contained in list
+            continue
+        s_trans.append(np.rot90(s, i))
+        a_trans.append(np.rot90(a, i))
+        sa_trans.append(sa_next)
+
+    # Apply flips
+    sa_next = np.fliplr(sa)
+    if not same_states(sa_trans, sa_next):
+        s_trans.append(np.fliplr(s))
+        a_trans.append(np.fliplr(a))
+        sa_trans.append(sa_next)
+    sa_next = np.flipud(sa)
+    if not same_states(sa_trans, sa_next):
+        s_trans.append(np.flipud(s))
+        a_trans.append(np.flipud(a))
+        sa_trans.append(sa_next)
+
+    return [np.transpose(s, [2, 0, 1]) for s in s_trans], a_trans
+
+def same_states(s1, s2):
     """
-    Create full state.
+    Check states s1 (or one of in case of array-like) and s2 are the same.
     """
-    s_t = np.empty([2, board_size, board_size])
+    return np.any(np.isclose(np.mean(np.square(s1-s2), axis=(1, 2)), 0))
 
-    if move_x:
-        s_t[0] = sx_t
-        s_t[1] = so_t
-    else:
-        s_t[0] = so_t
-        s_t[1] = sx_t
+def create_state(move_x, sx, so):
+    """
+    Create full state from X and O states.
+    """
+    return np.array([sx, so] if move_x else [so, sx], dtype=np.float)
 
-    return s_t
-
-def choose_action(q_t, sx_t, so_t, epsilon):
+def choose_action(q, sx, so, epsilon):
     """
     Choose action index for given state.
     """
     # Get valid action indices
-    a_t_vindices = np.where((sx_t+so_t)==False)
-    a_t_tvindices = np.transpose(a_t_vindices)
+    a_vindices = np.where((sx+so)==False)
+    a_tvindices = np.transpose(a_vindices)
 
-    q_max_index = tuple(a_t_tvindices[np.argmax(q_t[a_t_vindices])])
+    q_max_index = tuple(a_tvindices[np.argmax(q[a_vindices])])
 
     # Choose next action based on epsilon-greedy policy
     if np.random.random() <= epsilon:
         # Choose random action from list of valid actions
-        a_t_index = tuple(a_t_tvindices[np.random.randint(len(a_t_tvindices))])
+        a_index = tuple(a_tvindices[np.random.randint(len(a_tvindices))])
     else:
         # Choose valid action w/ max Q
-        a_t_index = q_max_index
+        a_index = q_max_index
 
-    return q_max_index, a_t_index
+    return q_max_index, a_index
 
 def apply_action(move_x, sx, so, a_index):
     """
@@ -395,7 +437,16 @@ def apply_action(move_x, sx, so, a_index):
         return REWARD_DRAW, sx, so, True
     return REWARD_ACTION, sx, so, False
 
+def q_values(session, q_nn, s, s_t):
+    """
+    Get Q values for actions from network for given state.
+    """
+    return q_nn.eval(session=session, feed_dict={s: [s_t]})[0]
+
 def build_summaries():
+    """
+    Build tensorboard summaries.
+    """
     win_rate_op = tf.Variable(0.)
     tf.scalar_summary("Win Rate", win_rate_op)
     episode_length_op = tf.Variable(0.)
@@ -405,6 +456,9 @@ def build_summaries():
     return win_rate_op, episode_length_op, epsilon_op
 
 def build_graph():
+    """
+    Build tensorflow Q network graph.
+    """
     s = tf.placeholder(tf.float32, [None, 2, board_size, board_size], name="s")
 
     # Inputs shape: [batch, channel, height, width] need to be changed into
