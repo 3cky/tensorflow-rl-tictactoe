@@ -26,6 +26,9 @@ REWARD_DRAW = 0.
 # Ordinary action reward
 REWARD_ACTION = 0.
 
+# Hidden layer size
+hidden_layer_size = 50
+
 # Reward discount rate
 gamma = 0.8
 
@@ -469,7 +472,7 @@ def build_graph():
     net = tf.reshape(net, [-1, int(np.prod(net.get_shape().as_list()[1:]))])
 
     # Hidden fully connected layer
-    net = layers.fully_connected(net, 50, activation_fn=nn.relu)
+    net = layers.fully_connected(net, hidden_layer_size, activation_fn=nn.relu)
 
     # Output layer
     net = layers.fully_connected(net, board_size*board_size, activation_fn=None)
@@ -496,12 +499,13 @@ def main(_):
 
 def parse_flags():
     global run_name, board_size, marks_win, episode_max, learning_rate, gamma, epsilon_initial, \
-        epsilon_final, epsilon_anneal_episodes
+        epsilon_final, epsilon_anneal_episodes, hidden_layer_size
 
     flags = tf.app.flags
     flags.DEFINE_string("name", run_name, "Tensorboard run name")
     flags.DEFINE_integer("board_size", board_size, "Board size")
     flags.DEFINE_integer("marks_win", marks_win, "Number of contiguous marks to win")
+    flags.DEFINE_integer("hidden_layer_size", hidden_layer_size, "Hidden layer size")
     flags.DEFINE_integer("episodes", episode_max, "Number of training episodes to run")
     flags.DEFINE_float("learning_rate", learning_rate, "Learning rate")
     flags.DEFINE_float("gamma", gamma, "Reward discount rate")
@@ -513,6 +517,7 @@ def parse_flags():
     run_name = FLAGS.name
     board_size = FLAGS.board_size
     marks_win = FLAGS.marks_win
+    hidden_layer_size = FLAGS.hidden_layer_size
     episode_max = FLAGS.episodes
     learning_rate = FLAGS.learning_rate
     gamma = FLAGS.gamma
