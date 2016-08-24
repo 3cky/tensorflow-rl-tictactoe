@@ -33,16 +33,16 @@ gamma = 0.8
 epsilon_initial = 1.0
 # Final exploration rate
 epsilon_final = .01
-# Number of episodes to anneal epsilon
+# Number of training episodes to anneal epsilon
 epsilon_anneal_episodes = 5000
 
 # Learning rate
 learning_rate = .001
 
-# Number of episodes to run
+# Number of training episodes to run
 episode_max = 10000
 
-# Number of episodes to accumulate stats
+# Number of training episodes to accumulate stats
 episode_stats = 100
 
 # Run name for tensorboard
@@ -494,10 +494,33 @@ def main(_):
         saver = tf.train.Saver(max_to_keep=5)
         train(session, graph_ops, summary_ops, saver)
 
+def parse_flags():
+    global run_name, board_size, marks_win, episode_max, learning_rate, gamma, epsilon_initial, \
+        epsilon_final, epsilon_anneal_episodes
+
+    flags = tf.app.flags
+    flags.DEFINE_string("name", run_name, "Tensorboard run name")
+    flags.DEFINE_integer("board_size", board_size, "Board size")
+    flags.DEFINE_integer("marks_win", marks_win, "Number of contiguous marks to win")
+    flags.DEFINE_integer("episodes", episode_max, "Number of training episodes to run")
+    flags.DEFINE_float("learning_rate", learning_rate, "Learning rate")
+    flags.DEFINE_float("gamma", gamma, "Reward discount rate")
+    flags.DEFINE_float("epsilon_initial", epsilon_initial, "Initial exploration rate")
+    flags.DEFINE_float("epsilon_final", epsilon_final, "Final exploration rate")
+    flags.DEFINE_integer("epsilon_anneal", epsilon_anneal_episodes, "Number of training episodes to anneal epsilon")
+    FLAGS = flags.FLAGS
+
+    run_name = FLAGS.name
+    board_size = FLAGS.board_size
+    marks_win = FLAGS.marks_win
+    episode_max = FLAGS.episodes
+    learning_rate = FLAGS.learning_rate
+    gamma = FLAGS.gamma
+    epsilon_initial = FLAGS.epsilon_initial
+    epsilon_final = FLAGS.epsilon_final
+    epsilon_anneal_episodes = FLAGS.epsilon_anneal
+
 if __name__ == "__main__":
     colorama.init()
-    flags = tf.app.flags
-    flags.DEFINE_string("name", run_name, "Run name")
-    FLAGS = flags.FLAGS
-    run_name = FLAGS.name
+    parse_flags()
     tf.app.run()
