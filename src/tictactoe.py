@@ -29,6 +29,12 @@ import tensorflow as tf
 from tensorflow.contrib import layers
 from tensorflow.python.ops import nn
 
+# Python 3 compatiblilty hack
+try:
+    xrange
+except:
+    xrange = range
+
 # Board size
 board_size = 3
 
