@@ -240,9 +240,6 @@ def train(session, graph_ops, summary_ops, saver):
                 y_t_prev = r_t_prev + gamma * q_t[q_max_index]
                 # Apply equivalent transforms
                 s_t_prev, a_t_prev = apply_transforms(s_t_prev, a_t_prev)
-#                 if len(s_t_prev) < 4:
-#                     print("s_t_prev:\n", np.sum(s_t_prev, 1))
-#                     print("a_t_prev:\n", a_t_prev)
                 # Update Q network
                 session.run(q_nn_update, feed_dict={s: s_t_prev,
                                                     a: a_t_prev,
@@ -499,10 +496,11 @@ def main(_):
 
 def parse_flags():
     global run_name, board_size, marks_win, episode_max, learning_rate, gamma, epsilon_initial, \
-        epsilon_final, epsilon_anneal_episodes, hidden_layer_size
+        epsilon_final, epsilon_anneal_episodes, hidden_layer_size, summary_dir
 
     flags = tf.app.flags
     flags.DEFINE_string("name", run_name, "Tensorboard run name")
+    flags.DEFINE_string("summary_dir", summary_dir, "Tensorboard summary directory")
     flags.DEFINE_integer("board_size", board_size, "Board size")
     flags.DEFINE_integer("marks_win", marks_win, "Number of contiguous marks to win")
     flags.DEFINE_integer("hidden_layer_size", hidden_layer_size, "Hidden layer size")
@@ -515,6 +513,7 @@ def parse_flags():
     FLAGS = flags.FLAGS
 
     run_name = FLAGS.name
+    summary_dir = FLAGS.summary_dir
     board_size = FLAGS.board_size
     marks_win = FLAGS.marks_win
     hidden_layer_size = FLAGS.hidden_layer_size
