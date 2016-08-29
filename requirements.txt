@@ -1,0 +1,2 @@
+tensorflow>=0.9
+colorama>=0.3.7
