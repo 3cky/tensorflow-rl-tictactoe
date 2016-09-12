@@ -215,10 +215,10 @@ def train(session, graph_ops, summary_ops, saver):
     summary_op = tf.merge_all_summaries()
 
     # Unpack graph ops
-    q_nn, q_nn_update, s, a, y = graph_ops
+    q_nn, q_nn_update, s, a, y, loss = graph_ops
 
     # Unpack summary ops
-    win_rate_summary, episode_length_summary, epsilon_summary = summary_ops
+    win_rate_summary, episode_length_summary, epsilon_summary, loss_summary = summary_ops
 
     # Setup exploration rate parameters
     epsilon = epsilon_initial
@@ -263,9 +263,10 @@ def train(session, graph_ops, summary_ops, saver):
                 # Apply equivalent transforms
                 s_t_prev, a_t_prev = apply_transforms(s_t_prev, a_t_prev)
                 # Update Q network
-                session.run(q_nn_update, feed_dict={s: s_t_prev,
-                                                    a: a_t_prev,
-                                                    y: [y_t_prev] * len(s_t_prev)})
+                q_update(session, q_nn_update,
+                         s, s_t_prev,
+                         a, a_t_prev,
+                         y, [y_t_prev] * len(s_t_prev))
 
             # Apply action to state
             r_t, sx_t, so_t, terminal = apply_action(move_x, sx_t, so_t, a_t_index)
@@ -277,17 +278,23 @@ def train(session, graph_ops, summary_ops, saver):
                 y_t = r_t # reward for current player
                 s_t_prev, a_t_prev, r_t_prev = sar_prev[-1] # previous opponent state/action/reward
                 y_t_prev = r_t_prev - gamma * r_t # discounted negative reward for opponent
+
                 # Apply equivalent transforms
                 s_t, a_t = apply_transforms(s_t, a_t)
                 s_t_prev, a_t_prev = apply_transforms(s_t_prev, a_t_prev)
+
                 # Update Q network
-                session.run(q_nn_update, feed_dict={s: s_t + s_t_prev,
-                                                    a: a_t + a_t_prev,
-                                                    y: [y_t] * len(s_t) + [y_t_prev] * len(s_t_prev)})
+                s_up = s_t + s_t_prev
+                a_up = a_t + a_t_prev
+                y_up = [y_t] * len(s_t) + [y_t_prev] * len(s_t_prev)
+                q_update(session, q_nn_update, s, s_up, a, a_up, y, y_up)
+
+                # Get episode loss
+                loss_ep = q_loss(session, loss, s, s_up, a, a_up, y, y_up)
 
                 # Play test game before next episode
-                length, win_x, win_o = test(session, q_nn, s)
-                stats.append([win_x or win_o, length])
+                length_ep, win_x, win_o = test(session, q_nn, s)
+                stats.append([win_x or win_o, length_ep, loss_ep])
                 break
 
             # Store state, action and its reward
@@ -303,12 +310,14 @@ def train(session, graph_ops, summary_ops, saver):
 
         # Process stats
         if len(stats) >= episode_stats:
-            win_rate, length = np.mean(stats, axis=0)
+            mean_win_rate, mean_length, mean_loss = np.mean(stats, axis=0)
             print("episode: %d," % episode_num, "epsilon: %.5f," % epsilon, \
-                  "win rate: %.3f," % win_rate, "length: %.3f" % length)
-            summary_str = session.run(summary_op, feed_dict={win_rate_summary: win_rate, \
-                                                             episode_length_summary: length,
-                                                             epsilon_summary: epsilon})
+                  "mean win rate: %.3f," % mean_win_rate, "mean length: %.3f," % mean_length,
+                  "mean loss: %.3f" % mean_loss)
+            summary_str = session.run(summary_op, feed_dict={win_rate_summary: mean_win_rate, \
+                                                             episode_length_summary: mean_length,
+                                                             epsilon_summary: epsilon,
+                                                             loss_summary: mean_loss})
             writer.add_summary(summary_str, episode_num)
             stats = []
 
@@ -465,6 +474,18 @@ def q_values(session, q_nn, s, s_t):
     """
     return q_nn.eval(session=session, feed_dict={s: [s_t]})[0]
 
+def q_update(session, q_nn_update, s, s_t, a, a_t, y, y_t):
+    """
+    Update Q network with (s, a, y) values.
+    """
+    session.run(q_nn_update, feed_dict={s: s_t, a: a_t, y: y_t})
+
+def q_loss(session, loss, s, s_t, a, a_t, y, y_t):
+    """
+    Get loss for (s, a, y) values.
+    """
+    return loss.eval(session=session, feed_dict={s: s_t, a: a_t, y: y_t})
+
 def build_summaries():
     """
     Build tensorboard summaries.
@@ -475,7 +496,9 @@ def build_summaries():
     tf.scalar_summary("Episode Length", episode_length_op)
     epsilon_op = tf.Variable(0.)
     tf.scalar_summary("Epsilon", epsilon_op)
-    return win_rate_op, episode_length_op, epsilon_op
+    loss_op = tf.Variable(0.)
+    tf.scalar_summary("Loss", loss_op)
+    return win_rate_op, episode_length_op, epsilon_op, loss_op
 
 def build_graph():
     """
@@ -507,7 +530,7 @@ def build_graph():
     optimizer = tf.train.AdamOptimizer(learning_rate)
     q_nn_update = optimizer.minimize(loss, var_list=tf.trainable_variables())
 
-    return q_nn, q_nn_update, s, a, y
+    return q_nn, q_nn_update, s, a, y, loss
 
 def main(_):
     with tf.Session() as session:
