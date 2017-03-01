@@ -76,6 +76,7 @@ run_name = "%s" % int(time.time())
 # Directory for storing tensorboard summaries
 summary_dir = '/tmp/tensorflow/tictactoe'
 
+
 def dump_board(sx, so, move_index=None, win_indices=None, q=None):
     """
     Dump board state to the terminal.
@@ -86,7 +87,7 @@ def dump_board(sx, so, move_index=None, win_indices=None, q=None):
                 color = Fore.GREEN
             else:
                 color = Fore.BLACK
-            if not win_indices is None and (i, j) in win_indices:
+            if win_indices is not None and (i, j) in win_indices:
                 color += Back.LIGHTYELLOW_EX
             print(" ", end="")
             if sx[i, j] and so[i, j]:
@@ -97,7 +98,7 @@ def dump_board(sx, so, move_index=None, win_indices=None, q=None):
                 print(color + "O" + Style.RESET_ALL, end="")
             else:
                 print(".", end="")
-        if not q is None:
+        if q is not None:
             print("   ", end="")
             for j in xrange(board_size):
                 if (i, j) == move_index:
@@ -110,6 +111,7 @@ def dump_board(sx, so, move_index=None, win_indices=None, q=None):
                     print(Fore.LIGHTBLACK_EX + "    *  " + Style.RESET_ALL, end="")
         print()
     print()
+
 
 def check_win(s):
     """
@@ -145,7 +147,7 @@ def check_win(s):
     # Check diagonals
     for i in xrange(board_size):
         if i+1 < marks_win:
-            continue # diagonals are shorter than number of marks to win
+            continue  # diagonals are shorter than number of marks to win
         marks_d1 = 0
         marks_d2 = 0
         marks_d3 = 0
@@ -176,7 +178,7 @@ def check_win(s):
 
             # Check second (bottom) pair of diagonals
             if i == board_size-1:
-                continue # main diagonals already checked
+                continue  # main diagonals already checked
             if s[board_size-i+j-1, j]:
                 marks_d3 += 1
                 win_indices_d3.append((board_size-i+j-1, j))
@@ -197,11 +199,13 @@ def check_win(s):
 
     return False, []
 
+
 def check_draw(sx, so):
     """
     Check for draw.
     """
     return np.all(sx+so)
+
 
 def train(session, graph_ops, summary_ops, saver):
     """
@@ -242,7 +246,7 @@ def train(session, graph_ops, summary_ops, saver):
         sx_t[:] = False
         so_t[:] = False
 
-        sar_prev = [(None, None, None), (None, None, None)] # [(s, a, r(a)), (s(a), o, r(o)]
+        sar_prev = [(None, None, None), (None, None, None)]  # [(s, a, r(a)), (s(a), o, r(o)]
 
         move_num = 1
 
@@ -257,7 +261,7 @@ def train(session, graph_ops, summary_ops, saver):
             # Retrieve previous player state/action/reward (if present)
             s_t_prev, a_t_prev, r_t_prev = sar_prev.pop(0)
 
-            if not s_t_prev is None:
+            if s_t_prev is not None:
                 # Calculate updated Q value
                 y_t_prev = r_t_prev + gamma * q_t[q_max_index]
                 # Apply equivalent transforms
@@ -274,10 +278,10 @@ def train(session, graph_ops, summary_ops, saver):
             a_t = np.zeros_like(sx_t, dtype=np.float32)
             a_t[a_t_index] = 1.
 
-            if terminal: # win or draw
-                y_t = r_t # reward for current player
-                s_t_prev, a_t_prev, r_t_prev = sar_prev[-1] # previous opponent state/action/reward
-                y_t_prev = r_t_prev - gamma * r_t # discounted negative reward for opponent
+            if terminal:  # win or draw
+                y_t = r_t  # reward for current player
+                s_t_prev, a_t_prev, r_t_prev = sar_prev[-1]  # previous opponent state/action/reward
+                y_t_prev = r_t_prev - gamma * r_t  # discounted negative reward for opponent
 
                 # Apply equivalent transforms
                 s_t, a_t = apply_transforms(s_t, a_t)
@@ -311,10 +315,10 @@ def train(session, graph_ops, summary_ops, saver):
         # Process stats
         if len(stats) >= episode_stats:
             mean_win_rate, mean_length, mean_loss = np.mean(stats, axis=0)
-            print("episode: %d," % episode_num, "epsilon: %.5f," % epsilon, \
+            print("episode: %d," % episode_num, "epsilon: %.5f," % epsilon,
                   "mean win rate: %.3f," % mean_win_rate, "mean length: %.3f," % mean_length,
                   "mean loss: %.3f" % mean_loss)
-            summary_str = session.run(summary_op, feed_dict={win_rate_summary: mean_win_rate, \
+            summary_str = session.run(summary_op, feed_dict={win_rate_summary: mean_win_rate,
                                                              episode_length_summary: mean_length,
                                                              epsilon_summary: epsilon,
                                                              loss_summary: mean_loss})
@@ -325,6 +329,7 @@ def train(session, graph_ops, summary_ops, saver):
         episode_num += 1
 
     test(session, q_nn, s, dump=True)
+
 
 def test(session, q_nn, s, dump=False):
     """
@@ -381,6 +386,7 @@ def test(session, q_nn, s, dump=False):
         move_x = not move_x
         move_num += 1
 
+
 def apply_transforms(s, a):
     """
     Apply state/action equivalent transforms (rotations/flips).
@@ -397,7 +403,7 @@ def apply_transforms(s, a):
 
     # Apply rotations
     sa_next = sa
-    for i in xrange(1, 4): # rotate to 90, 180, 270 degrees
+    for i in xrange(1, 4):  # rotate to 90, 180, 270 degrees
         sa_next = np.rot90(sa_next)
         if same_states(sa_trans, sa_next):
             # Skip rotated state matching state already contained in list
@@ -420,17 +426,20 @@ def apply_transforms(s, a):
 
     return [np.transpose(s, [2, 0, 1]) for s in s_trans], a_trans
 
+
 def same_states(s1, s2):
     """
     Check states s1 (or one of in case of array-like) and s2 are the same.
     """
     return np.any(np.isclose(np.mean(np.square(s1-s2), axis=(1, 2)), 0))
 
+
 def create_state(move_x, sx, so):
     """
     Create full state from X and O states.
     """
     return np.array([sx, so] if move_x else [so, sx], dtype=np.float)
+
 
 def choose_action(q, sx, so, epsilon):
     """
@@ -452,6 +461,7 @@ def choose_action(q, sx, so, epsilon):
 
     return q_max_index, a_index
 
+
 def apply_action(move_x, sx, so, a_index):
     """
     Apply action to state, get reward and check for terminal state.
@@ -468,11 +478,13 @@ def apply_action(move_x, sx, so, a_index):
         return REWARD_DRAW, sx, so, True
     return REWARD_ACTION, sx, so, False
 
+
 def q_values(session, q_nn, s, s_t):
     """
     Get Q values for actions from network for given state.
     """
     return q_nn.eval(session=session, feed_dict={s: [s_t]})[0]
+
 
 def q_update(session, q_nn_update, s, s_t, a, a_t, y, y_t):
     """
@@ -480,11 +492,13 @@ def q_update(session, q_nn_update, s, s_t, a, a_t, y, y_t):
     """
     session.run(q_nn_update, feed_dict={s: s_t, a: a_t, y: y_t})
 
+
 def q_loss(session, loss, s, s_t, a, a_t, y, y_t):
     """
     Get loss for (s, a, y) values.
     """
     return loss.eval(session=session, feed_dict={s: s_t, a: a_t, y: y_t})
+
 
 def build_summaries():
     """
@@ -499,6 +513,7 @@ def build_summaries():
     loss_op = tf.Variable(0.)
     tf.scalar_summary("Loss", loss_op)
     return win_rate_op, episode_length_op, epsilon_op, loss_op
+
 
 def build_graph():
     """
@@ -532,12 +547,14 @@ def build_graph():
 
     return q_nn, q_nn_update, s, a, y, loss
 
+
 def main(_):
     with tf.Session() as session:
         graph_ops = build_graph()
         summary_ops = build_summaries()
         saver = tf.train.Saver(max_to_keep=5)
         train(session, graph_ops, summary_ops, saver)
+
 
 def parse_flags():
     global run_name, board_size, marks_win, episode_max, learning_rate, gamma, epsilon_initial, \
