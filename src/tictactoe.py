@@ -212,11 +212,11 @@ def train(session, graph_ops, summary_ops, saver):
     Train model.
     """
     # Initialize variables
-    session.run(tf.initialize_all_variables())
+    session.run(tf.global_variables_initializer())
 
     # Initialize summaries writer for tensorflow
-    writer = tf.train.SummaryWriter(summary_dir + "/" + run_name, session.graph)
-    summary_op = tf.merge_all_summaries()
+    writer = tf.summary.FileWriter(summary_dir + "/" + run_name, session.graph)
+    summary_op = tf.summary.merge_all()
 
     # Unpack graph ops
     q_nn, q_nn_update, s, a, y, loss = graph_ops
@@ -505,13 +505,13 @@ def build_summaries():
     Build tensorboard summaries.
     """
     win_rate_op = tf.Variable(0.)
-    tf.scalar_summary("Win Rate", win_rate_op)
+    tf.summary.scalar("Win Rate", win_rate_op)
     episode_length_op = tf.Variable(0.)
-    tf.scalar_summary("Episode Length", episode_length_op)
+    tf.summary.scalar("Episode Length", episode_length_op)
     epsilon_op = tf.Variable(0.)
-    tf.scalar_summary("Epsilon", epsilon_op)
+    tf.summary.scalar("Epsilon", epsilon_op)
     loss_op = tf.Variable(0.)
-    tf.scalar_summary("Loss", loss_op)
+    tf.summary.scalar("Loss", loss_op)
     return win_rate_op, episode_length_op, epsilon_op, loss_op
 
 
@@ -540,7 +540,7 @@ def build_graph():
     # Define loss and gradient update ops
     a = tf.placeholder(tf.float32, [None, board_size, board_size], name="a")
     y = tf.placeholder(tf.float32, [None], name="y")
-    action_q_values = tf.reduce_sum(tf.mul(q_nn, a), reduction_indices=[1, 2])
+    action_q_values = tf.reduce_sum(tf.multiply(q_nn, a), axis=[1, 2])
     loss = tf.reduce_mean(tf.square(y - action_q_values))
     optimizer = tf.train.AdamOptimizer(learning_rate)
     q_nn_update = optimizer.minimize(loss, var_list=tf.trainable_variables())
